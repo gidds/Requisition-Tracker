@@ -4,6 +4,17 @@ import xml.etree.ElementTree as ET
 from datetime import datetime
 import os
 import csv
+import sys
+
+def resource_path(relative_path):
+    """ Get absolute path to resource, works for dev and for PyInstaller """
+    try:
+        # PyInstaller creates a temp folder and stores path in _MEIPASS
+        base_path = sys._MEIPASS
+    except Exception:
+        base_path = os.path.abspath(".")
+
+    return os.path.join(base_path, relative_path)
 
 class BaseWindow:
     def __init__(self, title, master=None):
@@ -135,10 +146,11 @@ class RequisitionWindow(BaseWindow):
             "Status": "Pending",
             "Items": items
         }
-        save_to_xml(requisition)
-
-        messagebox.showinfo("Success", "Requisition logged successfully!")
-        self.root.destroy()
+        if save_to_xml(requisition):
+            messagebox.showinfo("Success", "Requisition logged successfully!")
+            self.root.destroy()
+        else:
+            messagebox.showerror("Error", "Failed to save requisition. Please try again.")
 
 class MainMenu(BaseWindow):
     def __init__(self, stock_items):
@@ -151,42 +163,71 @@ class MainMenu(BaseWindow):
         new_requisition_button = tk.Button(self.frame, text="New Requisition", command=self.open_requisition)
         new_requisition_button.pack(pady=10)
 
-        # Create a frame to hold the canvas and scrollbar
-        self.canvas_frame = tk.Frame(self.frame)
-        self.canvas_frame.pack(fill=tk.BOTH, expand=True)
+        # Create a frame to hold both scrollable areas
+        self.requisitions_frame = tk.Frame(self.frame)
+        self.requisitions_frame.pack(fill=tk.BOTH, expand=True)
 
-        # Create a canvas inside the frame
-        self.canvas = tk.Canvas(self.canvas_frame)
-        self.canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        # Create pending requisitions frame
+        self.pending_frame, self.pending_canvas, self.pending_inner = self.create_scrollable_area(self.requisitions_frame, "Pending Requisitions")
+        self.pending_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
-        # Add a scrollbar to the frame
-        self.scrollbar = tk.Scrollbar(self.canvas_frame, orient=tk.VERTICAL, command=self.canvas.yview)
-        self.scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-
-        # Configure the canvas
-        self.canvas.configure(yscrollcommand=self.scrollbar.set)
-        self.canvas.bind('<Configure>', lambda e: self.canvas.configure(scrollregion=self.canvas.bbox("all")))
-
-        # Create a frame inside the canvas to hold the requisitions
-        self.inner_frame = tk.Frame(self.canvas)
-        self.canvas.create_window((0, 0), window=self.inner_frame, anchor="nw")
+        # Create completed requisitions frame
+        self.completed_frame, self.completed_canvas, self.completed_inner = self.create_scrollable_area(self.requisitions_frame, "Completed Requisitions")
+        self.completed_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
 
         self.display_requisitions()
+
+    def create_scrollable_area(self, parent, title):
+        frame = tk.LabelFrame(parent, text=title)
+        
+        canvas = tk.Canvas(frame)
+        scrollbar = tk.Scrollbar(frame, orient=tk.VERTICAL, command=canvas.yview)
+        
+        inner_frame = tk.Frame(canvas)
+        
+        canvas.create_window((0, 0), window=inner_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+        
+        canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        
+        canvas.bind('<Configure>', lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
+        
+        return frame, canvas, inner_frame
+
     
     def display_requisitions(self):
+        print("Starting display_requisitions")
         # Clear previous content
-        for widget in self.inner_frame.winfo_children():
+        for widget in self.pending_inner.winfo_children():
+            widget.destroy()
+        for widget in self.completed_inner.winfo_children():
             widget.destroy()
 
+        pending_count = 0
+        completed_count = 0
+
         for req in self.requisitions:
-            self.draw_requisition(req)
+            if req['Status'] == 'Pending':
+                self.draw_requisition(req, self.pending_inner)
+                pending_count += 1
+            else:
+                self.draw_requisition(req, self.completed_inner)
+                completed_count += 1
 
-        # Update scroll region
-        self.inner_frame.update_idletasks()
-        self.canvas.configure(scrollregion=self.canvas.bbox("all"))
+        # Update scroll regions
+        self.pending_inner.update_idletasks()
+        self.pending_canvas.configure(scrollregion=self.pending_canvas.bbox("all"))
+    
+        self.completed_inner.update_idletasks()
+        self.completed_canvas.configure(scrollregion=self.completed_canvas.bbox("all"))
 
-    def draw_requisition(self, req):
-        frame = tk.Frame(self.inner_frame, relief=tk.RIDGE, borderwidth=1)
+        print(f"Displayed {pending_count} pending and {completed_count} completed requisitions")
+
+
+    def draw_requisition(self, req, parent_frame):
+        print(f"Drawing requisition: {req['Requester']} - {req['Status']}")
+        frame = tk.Frame(parent_frame, relief=tk.RIDGE, borderwidth=1)
         frame.pack(fill=tk.X, padx=5, pady=5, expand=True)
 
         header_frame = tk.Frame(frame)
@@ -210,6 +251,8 @@ class MainMenu(BaseWindow):
             tk.Label(items_frame, text=item, anchor="w").grid(row=i, column=0, padx=5, sticky="w")
             tk.Label(items_frame, text=qty, anchor="w").grid(row=i, column=1, padx=5, sticky="w")
 
+        print(f"Finished drawing requisition: {req['Requester']}")
+    
     def toggle_status(self, req):
         if req['Status'] == 'Pending':
             if messagebox.askyesno("Mark Complete", "Do you want to mark this requisition as complete?"):
@@ -224,7 +267,9 @@ class MainMenu(BaseWindow):
     
     def refresh_requisitions(self):
         self.requisitions = self.load_requisitions()
+        print(f"Refreshed requisitions. Total count: {len(self.requisitions)}")
         self.display_requisitions()
+        self.root.update()  # Force update of the main window
 
     def open_requisition(self):
         self.root.withdraw()  # Hide the main window
@@ -235,8 +280,7 @@ class MainMenu(BaseWindow):
 
     def load_requisitions(self, filename='log_data.xml'):
         requisitions = []
-        script_dir = os.path.dirname(os.path.abspath(__file__))
-        file_path = os.path.join(script_dir, filename)
+        file_path = resource_path(filename)
         try:
             tree = ET.parse(file_path)
             root = tree.getroot()
@@ -249,6 +293,8 @@ class MainMenu(BaseWindow):
                 }
                 requisitions.append(requisition)
             print(f"Loaded {len(requisitions)} requisitions")
+            for idx, req in enumerate(requisitions):
+                print(f"Requisition {idx + 1}: {req['Requester']} - {req['Status']}")
         except FileNotFoundError:
             print(f"File not found: {file_path}")
         except ET.ParseError as e:
@@ -282,6 +328,7 @@ class MainMenu(BaseWindow):
 
 def load_stock_items(filename='stock_items.csv'):
     stock_items = []
+    file_path = resource_path(filename)
     script_dir = os.path.dirname(os.path.abspath(__file__))
     file_path = os.path.join(script_dir, filename)
     try:
@@ -295,8 +342,7 @@ def load_stock_items(filename='stock_items.csv'):
     return stock_items
 
 def save_to_xml(requisition, filename='log_data.xml'):
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    file_path = os.path.join(script_dir, filename)
+    file_path = resource_path(filename)
     
     try:
         tree = ET.parse(file_path)
@@ -318,22 +364,29 @@ def save_to_xml(requisition, filename='log_data.xml'):
 
     tree.write(file_path, encoding="utf-8", xml_declaration=True)
     print(f"Requisition saved to {file_path}")
+    
+    try:
+        tree.write(file_path, encoding="utf-8", xml_declaration=True)
+        print(f"Requisition saved to {file_path}")
+        return True
+    except Exception as e:
+        print(f"Error saving requisition: {e}")
+        return False
 
-def update_xml_status(completed_req, filename='log_data.xml'):
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    file_path = os.path.join(script_dir, filename)
+def update_xml_status(updated_req, filename='log_data.xml'):
+    file_path = resource_path(filename)
     
     tree = ET.parse(file_path)
     root = tree.getroot()
 
     for req in root.findall('requisition'):
-        if (req.find('Requester').text == completed_req['Requester'] and
-            req.find('Date').text == completed_req['Date']):
-            req.find('Status').text = 'Completed'
+        if (req.find('Requester').text == updated_req['Requester'] and
+            req.find('Date').text == updated_req['Date']):
+            req.find('Status').text = updated_req['Status']
             break
 
     tree.write(file_path, encoding="utf-8", xml_declaration=True)
-    print(f"Requisition status updated in {file_path}")
+    print(f"Requisition status updated to {updated_req['Status']} in {file_path}")
 
 if __name__ == "__main__":
     stock_items = load_stock_items()
