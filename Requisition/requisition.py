@@ -5,6 +5,7 @@ from datetime import datetime
 import os
 import csv
 import sys
+import chardet
 
 def resource_path(relative_path):
     """ Get absolute path to resource, works for dev and for PyInstaller """
@@ -241,6 +242,11 @@ class MainMenu(BaseWindow):
         status_label.pack(side=tk.RIGHT, padx=5)
         status_label.bind('<Button-1>', lambda e, r=req: self.toggle_status(r))
 
+    # Add date label for completed requisitions
+        if req['Status'] == 'Completed':
+            date_label = tk.Label(header_frame, text=req['Date'], anchor="e")
+            date_label.pack(side=tk.RIGHT, padx=5)
+
         items_frame = tk.Frame(frame)
         items_frame.pack(fill=tk.X)
 
@@ -252,6 +258,7 @@ class MainMenu(BaseWindow):
             tk.Label(items_frame, text=qty, anchor="w").grid(row=i, column=1, padx=5, sticky="w")
 
         print(f"Finished drawing requisition: {req['Requester']}")
+
     
     def toggle_status(self, req):
         if req['Status'] == 'Pending':
@@ -331,15 +338,36 @@ def load_stock_items(filename='stock_items.csv'):
     file_path = resource_path(filename)
     script_dir = os.path.dirname(os.path.abspath(__file__))
     file_path = os.path.join(script_dir, filename)
+    
+    # Detect the file encoding
+    with open(file_path, 'rb') as file:
+        raw_data = file.read()
+    detected = chardet.detect(raw_data)
+    encoding = detected['encoding']
+    
+    print(f"Detected encoding: {encoding}")
+    
     try:
-        with open(file_path, mode='r') as file:
+        with open(file_path, mode='r', encoding=encoding) as file:
             reader = csv.reader(file)
             next(reader)  # Skip header
             for row in reader:
-                stock_items.append(row[0])  # Assuming stock names are in the first column
+                if row:  # Check if the row is not empty
+                    stock_items.append(row[0])  # Assuming stock names are in the first column
     except IOError as e:
         print(f"Error loading stock items: {e}")
+    except UnicodeDecodeError as e:
+        print(f"Encoding error: {e}. Trying with 'latin-1' encoding.")
+        # If the detected encoding fails, try with 'latin-1'
+        with open(file_path, mode='r', encoding='latin-1') as file:
+            reader = csv.reader(file)
+            next(reader)  # Skip header
+            for row in reader:
+                if row:  # Check if the row is not empty
+                    stock_items.append(row[0])  # Assuming stock names are in the first column
+    
     return stock_items
+
 
 def save_to_xml(requisition, filename='log_data.xml'):
     file_path = resource_path(filename)
