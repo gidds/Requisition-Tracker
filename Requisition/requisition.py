@@ -6,6 +6,7 @@ import os
 import csv
 import sys
 import chardet
+import uuid
 
 def resource_path(relative_path):
     """ Get absolute path to resource, works for dev and for PyInstaller """
@@ -142,6 +143,7 @@ class RequisitionWindow(BaseWindow):
             return
 
         requisition = {
+            "ID": str(uuid.uuid4())[:8],
             "Requester": requester,
             "Date": request_date,
             "Status": "Pending",
@@ -234,8 +236,8 @@ class MainMenu(BaseWindow):
         header_frame = tk.Frame(frame)
         header_frame.pack(fill=tk.X)
 
-        requester_label = tk.Label(header_frame, text=req['Requester'], anchor="w")
-        requester_label.pack(side=tk.LEFT, padx=5)
+        id_requester_label = tk.Label(header_frame, text=f"{req['ID']} - {req['Requester']}", anchor="w")
+        id_requester_label.pack(side=tk.LEFT, padx=5)
 
         status_color = "red" if req['Status'] == 'Pending' else "green"
         status_label = tk.Label(header_frame, text=req['Status'], fg=status_color)
@@ -262,12 +264,12 @@ class MainMenu(BaseWindow):
     
     def toggle_status(self, req):
         if req['Status'] == 'Pending':
-            if messagebox.askyesno("Mark Complete", "Do you want to mark this requisition as complete?"):
+            if messagebox.askyesno("Mark Complete", "Do you want to mark requisition {req['ID']} for {['Requester']} as complete?"):
                 req['Status'] = 'Completed'
                 update_xml_status(req)
                 self.refresh_requisitions()
         else:
-            if messagebox.askyesno("Mark Pending", "Do you want to mark this requisition as pending?"):
+            if messagebox.askyesno("Mark Pending", "Do you want to mark requisition {req['ID']} for {['Requester']} as pending?"):
                 req['Status'] = 'Pending'
                 update_xml_status(req)
                 self.refresh_requisitions()
@@ -293,20 +295,22 @@ class MainMenu(BaseWindow):
             root = tree.getroot()
             for req in root.findall('requisition'):
                 requisition = {
-                    'Requester': req.find('Requester').text,
-                    'Date': req.find('Date').text,
-                    'Status': req.find('Status').text,
-                    'Items': [(item.find('Name').text, item.find('Quantity').text) for item in req.find('Items')]
+                'ID': req.find('ID').text if req.find('ID') is not None else str(uuid.uuid4())[:8],
+                'Requester': req.find('Requester').text,
+                'Date': req.find('Date').text,
+                'Status': req.find('Status').text,
+                'Items': [(item.find('Name').text, item.find('Quantity').text) for item in req.find('Items')]
                 }
                 requisitions.append(requisition)
             print(f"Loaded {len(requisitions)} requisitions")
             for idx, req in enumerate(requisitions):
-                print(f"Requisition {idx + 1}: {req['Requester']} - {req['Status']}")
+                print(f"Requisition {idx + 1}: {req['ID']} - {req['Requester']} - {req['Status']}")
         except FileNotFoundError:
             print(f"File not found: {file_path}")
         except ET.ParseError as e:
             print(f"Error parsing XML: {e}")
         return requisitions
+
 
     def toggle_status(self, req):
         if req['Status'] == 'Pending':
@@ -335,37 +339,50 @@ class MainMenu(BaseWindow):
 
 def load_stock_items(filename='stock_items.csv'):
     stock_items = []
-    file_path = resource_path(filename)
     script_dir = os.path.dirname(os.path.abspath(__file__))
     file_path = os.path.join(script_dir, filename)
-    
+
+    print(f"Attempting to load stock items from: {file_path}")
+
     # Detect the file encoding
-    with open(file_path, 'rb') as file:
-        raw_data = file.read()
-    detected = chardet.detect(raw_data)
-    encoding = detected['encoding']
-    
-    print(f"Detected encoding: {encoding}")
-    
+    try:
+        with open(file_path, 'rb') as file:
+            raw_data = file.read()
+        detected = chardet.detect(raw_data)
+        encoding = detected['encoding']
+        print(f"Detected encoding: {encoding}")
+    except IOError as e:
+        print(f"Error reading file for encoding detection: {e}")
+        return stock_items
+
+    # Try to read the file with the detected encoding
     try:
         with open(file_path, mode='r', encoding=encoding) as file:
             reader = csv.reader(file)
-            next(reader)  # Skip header
+            next(reader, None)  # Skip header, use None to handle empty files
             for row in reader:
                 if row:  # Check if the row is not empty
-                    stock_items.append(row[0])  # Assuming stock names are in the first column
+                    stock_items.append(row[0].strip())  # Assuming stock names are in the first column, strip whitespace
+    except UnicodeDecodeError as e:
+        print(f"Error with detected encoding: {e}. Trying with 'utf-8' and 'latin-1' encodings.")
+        
+        # If the detected encoding fails, try with 'utf-8' and then 'latin-1'
+        for fallback_encoding in ['utf-8', 'latin-1']:
+            try:
+                with open(file_path, mode='r', encoding=fallback_encoding) as file:
+                    reader = csv.reader(file)
+                    next(reader, None)  # Skip header, use None to handle empty files
+                    for row in reader:
+                        if row:  # Check if the row is not empty
+                            stock_items.append(row[0].strip())  # Assuming stock names are in the first column, strip whitespace
+                print(f"Successfully read file with {fallback_encoding} encoding.")
+                break  # Exit the loop if successful
+            except UnicodeDecodeError:
+                print(f"Failed to read with {fallback_encoding} encoding.")
     except IOError as e:
         print(f"Error loading stock items: {e}")
-    except UnicodeDecodeError as e:
-        print(f"Encoding error: {e}. Trying with 'latin-1' encoding.")
-        # If the detected encoding fails, try with 'latin-1'
-        with open(file_path, mode='r', encoding='latin-1') as file:
-            reader = csv.reader(file)
-            next(reader)  # Skip header
-            for row in reader:
-                if row:  # Check if the row is not empty
-                    stock_items.append(row[0])  # Assuming stock names are in the first column
-    
+
+    print(f"Loaded {len(stock_items)} stock items.")
     return stock_items
 
 
@@ -380,6 +397,7 @@ def save_to_xml(requisition, filename='log_data.xml'):
         tree = ET.ElementTree(root)
 
     req_elem = ET.SubElement(root, "requisition")
+    ET.SubElement(req_elem, "ID").text = str(uuid.uuid4())[:8]  # Use first 8 characters of a UUID
     ET.SubElement(req_elem, "Requester").text = requisition["Requester"]
     ET.SubElement(req_elem, "Date").text = requisition["Date"]
     ET.SubElement(req_elem, "Status").text = requisition["Status"]
@@ -408,8 +426,14 @@ def update_xml_status(updated_req, filename='log_data.xml'):
     root = tree.getroot()
 
     for req in root.findall('requisition'):
-        if (req.find('Requester').text == updated_req['Requester'] and
-            req.find('Date').text == updated_req['Date']):
+        # First, try to match by ID if it exists
+        if 'ID' in updated_req and req.find('ID') is not None:
+            if req.find('ID').text == updated_req['ID']:
+                req.find('Status').text = updated_req['Status']
+                break
+        # If ID doesn't exist or doesn't match, fall back to the original method
+        elif (req.find('Requester').text == updated_req['Requester'] and
+              req.find('Date').text == updated_req['Date']):
             req.find('Status').text = updated_req['Status']
             break
 
