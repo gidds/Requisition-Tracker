@@ -29,8 +29,8 @@ class BaseWindow:
         self.root.title(title)
         screen_width = self.root.winfo_screenwidth()
         screen_height = self.root.winfo_screenheight()
-        window_width = int(screen_width * 0.6)
-        window_height = int(screen_height * 0.6)
+        window_width = int(screen_width * 0.8)
+        window_height = int(screen_height * 0.8)
         x = (screen_width - window_width) // 2
         y = (screen_height - window_height) // 2
         self.root.geometry(f"{window_width}x{window_height}+{x}+{y}")
@@ -57,9 +57,10 @@ class BaseWindow:
         self.root.mainloop()
 
 class RequisitionWindow(BaseWindow):
-    def __init__(self, stock_items, master=None):
+    def __init__(self, stock_items, departments, master=None):
         super().__init__("New Requisition", master)
         self.stock_items = stock_items
+        self.departments = departments
         self.item_rows = []
         self.create_widgets()
 
@@ -70,6 +71,13 @@ class RequisitionWindow(BaseWindow):
         requester_label.pack()
         self.requester_entry = tk.Entry(self.scrollable_frame)
         self.requester_entry.pack()
+
+        department_label = tk.Label(self.scrollable_frame, text="Department")
+        department_label.pack()
+        self.department_var = tk.StringVar(self.root)
+        self.department_var.set(self.departments[0])
+        department_combobox = ttk.Combobox(self.scrollable_frame, textvariable=self.department_var, values=self.departments)
+        department_combobox.pack()
 
         self.items_frame = tk.Frame(self.scrollable_frame)
         self.items_frame.pack(fill=tk.X, padx=10, pady=10)
@@ -147,6 +155,7 @@ class RequisitionWindow(BaseWindow):
             "Requester": requester,
             "Date": request_date,
             "Status": "Pending",
+            "Department": self.department_var.get(),
             "Items": items
         }
         if save_to_xml(requisition):
@@ -161,6 +170,39 @@ class MainMenu(BaseWindow):
         self.stock_items = stock_items
         self.requisitions = self.load_requisitions()
         self.create_widgets()
+
+    def load_departments(self, filename='department.csv'):
+        departments = []
+        file_path = resource_path(filename)
+        try:
+            with open(file_path, 'r') as f:
+                reader = csv.reader(f)
+                for row in reader:
+                    departments.append(row[0])
+        except FileNotFoundError:
+            print(f"File not found: {file_path}")
+    
+        # Create a StringVar to hold the selected department
+        self.department_var = tk.StringVar(self.root)
+        self.department_var.trace("w", lambda *args: self.filter_departments())
+    
+        # Create the dropdown menu
+        self.department_menu = tk.OptionMenu(self.root, self.department_var, *departments)
+        self.department_menu.pack()
+    
+        return departments
+    
+    def filter_departments(self):
+        selected_department = self.department_var.get()
+        print(f"Selected department: {selected_department}")
+    
+        # Filter the list of departments based on the selected department
+        filtered_departments = [department for department in self.departments if department.startswith(selected_department)]
+    
+        # Update the dropdown menu with the filtered list of departments
+        self.department_menu['menu'].delete(0, 'end')
+        for department in filtered_departments:
+            self.department_menu['menu'].add_command(label=department, command=lambda value=department: self.department_var.set(value))
 
     def create_widgets(self):
         new_requisition_button = tk.Button(self.frame, text="New Requisition", command=self.open_requisition)
@@ -200,7 +242,7 @@ class MainMenu(BaseWindow):
 
     
     def display_requisitions(self):
-        print("Starting display_requisitions")
+        #print("Starting display_requisitions")
         # Clear previous content
         for widget in self.pending_inner.winfo_children():
             widget.destroy()
@@ -225,11 +267,11 @@ class MainMenu(BaseWindow):
         self.completed_inner.update_idletasks()
         self.completed_canvas.configure(scrollregion=self.completed_canvas.bbox("all"))
 
-        print(f"Displayed {pending_count} pending and {completed_count} completed requisitions")
+        #print(f"Displayed {pending_count} pending and {completed_count} completed requisitions")
 
 
     def draw_requisition(self, req, parent_frame):
-        print(f"Drawing requisition: {req['Requester']} - {req['Status']}")
+        #print(f"Drawing requisition: {req['Requester']} - {req['Status']}")
         frame = tk.Frame(parent_frame, relief=tk.RIDGE, borderwidth=1)
         frame.pack(fill=tk.X, padx=5, pady=5, expand=True)
 
@@ -249,6 +291,10 @@ class MainMenu(BaseWindow):
             date_label = tk.Label(header_frame, text=req['Date'], anchor="e")
             date_label.pack(side=tk.RIGHT, padx=5)
 
+        if req['Status'] == 'Completed':
+            department_label = tk.Label(header_frame, text=req['Department'], anchor="e")
+            department_label.pack(side=tk.RIGHT, padx=5)
+
         items_frame = tk.Frame(frame)
         items_frame.pack(fill=tk.X)
 
@@ -259,7 +305,7 @@ class MainMenu(BaseWindow):
             tk.Label(items_frame, text=item, anchor="w").grid(row=i, column=0, padx=5, sticky="w")
             tk.Label(items_frame, text=qty, anchor="w").grid(row=i, column=1, padx=5, sticky="w")
 
-        print(f"Finished drawing requisition: {req['Requester']}")
+        #print(f"Finished drawing requisition: {req['Requester']}")
 
     
     def toggle_status(self, req):
@@ -276,13 +322,16 @@ class MainMenu(BaseWindow):
     
     def refresh_requisitions(self):
         self.requisitions = self.load_requisitions()
-        print(f"Refreshed requisitions. Total count: {len(self.requisitions)}")
+        #print(f"Refreshed requisitions. Total count: {len(self.requisitions)}")
         self.display_requisitions()
         self.root.update()  # Force update of the main window
 
     def open_requisition(self):
         self.root.withdraw()  # Hide the main window
-        req_window = RequisitionWindow(self.stock_items, self.root)
+        departments = self.load_departments()
+        if not departments:
+                departments = ['Stores']
+        req_window = RequisitionWindow(self.stock_items,departments, self.root)
         self.root.wait_window(req_window.root)
         self.root.deiconify()  # Show the main window again
         self.refresh_requisitions()
@@ -299,6 +348,7 @@ class MainMenu(BaseWindow):
                 'Requester': req.find('Requester').text,
                 'Date': req.find('Date').text,
                 'Status': req.find('Status').text,
+                'Department': req.find('Department').text if req.find('Department') is not None else '',
                 'Items': [(item.find('Name').text, item.find('Quantity').text) for item in req.find('Items')]
                 }
                 requisitions.append(requisition)
@@ -342,7 +392,7 @@ def load_stock_items(filename='stock_items.csv'):
     script_dir = os.path.dirname(os.path.abspath(__file__))
     file_path = os.path.join(script_dir, filename)
 
-    print(f"Attempting to load stock items from: {file_path}")
+    #print(f"Attempting to load stock items from: {file_path}")
 
     # Detect the file encoding
     try:
@@ -382,7 +432,7 @@ def load_stock_items(filename='stock_items.csv'):
     except IOError as e:
         print(f"Error loading stock items: {e}")
 
-    print(f"Loaded {len(stock_items)} stock items.")
+    #print(f"Loaded {len(stock_items)} stock items.")
     return stock_items
 
 
