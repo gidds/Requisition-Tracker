@@ -1,0 +1,6 @@
+|-- README.md
+|-- Requisition
+    |-- log_data.xml
+    |-- requisition.py
+    |-- requisition.spec
+    |-- stock_items.csv
