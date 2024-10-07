@@ -64,6 +64,14 @@ class RequisitionWindow(BaseWindow):
         self.item_rows = []
         self.create_widgets()
 
+    def update_department_combobox(self, event, combobox):
+        # Get the current text in the combobox
+        text = combobox.get()
+        # Filter the departments based on the text
+        departments = [department for department in self.departments if department.startswith(text)]
+        # Update the combobox with the filtered departments
+        combobox['values'] = departments
+
     def create_widgets(self):
         self.scrollable_frame = self.create_scrollable_frame()
 
@@ -78,6 +86,7 @@ class RequisitionWindow(BaseWindow):
         self.department_var.set(self.departments[0])
         department_combobox = ttk.Combobox(self.scrollable_frame, textvariable=self.department_var, values=self.departments)
         department_combobox.pack()
+        department_combobox.bind('<KeyRelease>', lambda event: self.update_department_combobox(event, department_combobox))
 
         self.items_frame = tk.Frame(self.scrollable_frame)
         self.items_frame.pack(fill=tk.X, padx=10, pady=10)
@@ -106,6 +115,7 @@ class RequisitionWindow(BaseWindow):
         stock_var = tk.StringVar(self.root)
         stock_combobox = ttk.Combobox(row_frame, textvariable=stock_var, values=self.stock_items)
         stock_combobox.pack(side=tk.LEFT)
+        stock_combobox.focus_set()
 
         quantity_entry = tk.Entry(row_frame, width=10)
         quantity_entry.pack(side=tk.LEFT, padx=5)
@@ -172,13 +182,13 @@ class MainMenu(BaseWindow):
         self.create_widgets()
 
     def load_departments(self, filename='Requisition/department.csv'):
-        departments = []
+        self.departments = []
         file_path = resource_path(filename)
         try:
             with open(file_path, 'r') as f:
                 reader = csv.reader(f)
                 for row in reader:
-                    departments.append(row[0])
+                    self.departments.append(row[0])
         except FileNotFoundError:
             print(f"File not found: {file_path}")
     
@@ -187,17 +197,17 @@ class MainMenu(BaseWindow):
         self.department_var.trace("w", lambda *args: self.filter_departments())
     
         # Create the dropdown menu
-        self.department_menu = tk.OptionMenu(self.root, self.department_var, *departments)
+        self.department_menu = tk.OptionMenu(self.root, self.department_var, *self.departments)
         self.department_menu.pack()
     
-        return departments
+        return self.departments
     
     def filter_departments(self):
         selected_department = self.department_var.get()
         print(f"Selected department: {selected_department}")
     
         # Filter the list of departments based on the selected department
-        filtered_departments = [department for department in self.departments if department.startswith(selected_department)]
+        filtered_departments = [department for department in self.departments if department == selected_department]
     
         # Update the dropdown menu with the filtered list of departments
         self.department_menu['menu'].delete(0, 'end')
