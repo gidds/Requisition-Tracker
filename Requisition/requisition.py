@@ -171,7 +171,7 @@ class MainMenu(BaseWindow):
         self.requisitions = self.load_requisitions()
         self.create_widgets()
 
-    def load_departments(self, filename='department.csv'):
+    def load_departments(self, filename='Requisition/department.csv'):
         departments = []
         file_path = resource_path(filename)
         try:
@@ -252,6 +252,8 @@ class MainMenu(BaseWindow):
         pending_count = 0
         completed_count = 0
 
+        
+
         for req in self.requisitions:
             if req['Status'] == 'Pending':
                 self.draw_requisition(req, self.pending_inner)
@@ -292,6 +294,15 @@ class MainMenu(BaseWindow):
             date_label.pack(side=tk.RIGHT, padx=5)
 
         if req['Status'] == 'Completed':
+            department_label = tk.Label(header_frame, text=req['Department'], anchor="e")
+            department_label.pack(side=tk.RIGHT, padx=5)
+
+    #Add date label for pending requisitions
+        if req['Status'] == 'Pending':
+            date_label = tk.Label(header_frame, text=req['Date'], anchor="e")
+            date_label.pack(side=tk.RIGHT, padx=5)
+    #Add Department label for pending requisitions
+        if req['Status'] == 'Pending':
             department_label = tk.Label(header_frame, text=req['Department'], anchor="e")
             department_label.pack(side=tk.RIGHT, padx=5)
 
@@ -336,7 +347,7 @@ class MainMenu(BaseWindow):
         self.root.deiconify()  # Show the main window again
         self.refresh_requisitions()
 
-    def load_requisitions(self, filename='log_data.xml'):
+    def load_requisitions(self, filename='Requisition/log_data.xml'):
         requisitions = []
         file_path = resource_path(filename)
         try:
@@ -436,7 +447,7 @@ def load_stock_items(filename='stock_items.csv'):
     return stock_items
 
 
-def save_to_xml(requisition, filename='log_data.xml'):
+def save_to_xml(requisition, filename='Requisition/log_data.xml'):
     file_path = resource_path(filename)
     
     try:
@@ -451,6 +462,7 @@ def save_to_xml(requisition, filename='log_data.xml'):
     ET.SubElement(req_elem, "Requester").text = requisition["Requester"]
     ET.SubElement(req_elem, "Date").text = requisition["Date"]
     ET.SubElement(req_elem, "Status").text = requisition["Status"]
+    ET.SubElement(req_elem, "Department").text = requisition["Department"]
     
     items_elem = ET.SubElement(req_elem, "Items")
     for item, quantity in requisition["Items"]:
@@ -469,7 +481,7 @@ def save_to_xml(requisition, filename='log_data.xml'):
         print(f"Error saving requisition: {e}")
         return False
 
-def update_xml_status(updated_req, filename='log_data.xml'):
+def update_xml_status(updated_req, filename='Requisition/log_data.xml'):
     file_path = resource_path(filename)
     
     tree = ET.parse(file_path)
