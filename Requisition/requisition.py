@@ -193,12 +193,12 @@ class MainMenu(BaseWindow):
             print(f"File not found: {file_path}")
     
         # Create a StringVar to hold the selected department
-        self.department_var = tk.StringVar(self.root)
-        self.department_var.trace("w", lambda *args: self.filter_departments())
+       # self.department_var = tk.StringVar(self.root)
+       # self.department_var.trace("w", lambda *args: self.filter_departments())
     
         # Create the dropdown menu
-        self.department_menu = tk.OptionMenu(self.root, self.department_var, *self.departments)
-        self.department_menu.pack()
+       # self.department_menu = tk.OptionMenu(self.root, self.department_var, *self.departments)
+       # self.department_menu.pack()
     
         return self.departments
     
