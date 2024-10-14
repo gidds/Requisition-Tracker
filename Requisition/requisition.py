@@ -8,6 +8,7 @@ import sys
 import chardet
 import uuid
 
+
 def resource_path(relative_path):
     """ Get absolute path to resource, works for dev and for PyInstaller """
     try:
@@ -17,6 +18,9 @@ def resource_path(relative_path):
         base_path = os.path.abspath(".")
 
     return os.path.join(base_path, relative_path)
+
+LOG_DATA_FILE = resource_path(os.path.join(os.path.dirname(__file__), 'log_data.xml'))
+DEPARTMENT_FILE = resource_path(os.path.join(os.path.dirname(__file__), 'department.csv'))
 
 class BaseWindow:
     def __init__(self, title, master=None):
@@ -181,9 +185,9 @@ class MainMenu(BaseWindow):
         self.requisitions = self.load_requisitions()
         self.create_widgets()
 
-    def load_departments(self, filename='Requisition/department.csv'):
+    def load_departments(self):
         self.departments = []
-        file_path = resource_path(filename)
+        file_path = DEPARTMENT_FILE
         try:
             with open(file_path, 'r') as f:
                 reader = csv.reader(f)
@@ -357,9 +361,9 @@ class MainMenu(BaseWindow):
         self.root.deiconify()  # Show the main window again
         self.refresh_requisitions()
 
-    def load_requisitions(self, filename='Requisition/log_data.xml'):
+    def load_requisitions(self):
         requisitions = []
-        file_path = resource_path(filename)
+        file_path = LOG_DATA_FILE
         try:
             tree = ET.parse(file_path)
             root = tree.getroot()
@@ -457,8 +461,8 @@ def load_stock_items(filename='stock_items.csv'):
     return stock_items
 
 
-def save_to_xml(requisition, filename='Requisition/log_data.xml'):
-    file_path = resource_path(filename)
+def save_to_xml(requisition):
+    file_path = LOG_DATA_FILE
     
     try:
         tree = ET.parse(file_path)
@@ -491,8 +495,8 @@ def save_to_xml(requisition, filename='Requisition/log_data.xml'):
         print(f"Error saving requisition: {e}")
         return False
 
-def update_xml_status(updated_req, filename='Requisition/log_data.xml'):
-    file_path = resource_path(filename)
+def update_xml_status(updated_req,):
+    file_path = LOG_DATA_FILE
     
     tree = ET.parse(file_path)
     root = tree.getroot()
